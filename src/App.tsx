@@ -28,11 +28,12 @@ import { DeveloperControlCenter } from "./components/DeveloperControlCenter";
 import { McpHub } from "./components/McpHub";
 import { FirebaseStudio } from "./components/FirebaseStudio";
 import { FirebaseProvider } from "./context/FirebaseContext";
+import { MasterNavigationHub } from "./components/MasterNavigationHub";
 import { BuildLogRecord, ProjectConfig } from "./types";
 import { Locale } from "./data/translations";
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<string>("canvas");
+  const [currentTab, setCurrentTab] = useState<string>("overview");
   const [locale, setLocale] = useState<Locale>("tr");
   const [theme, setTheme] = useState<"dark" | "cyber" | "light">("dark");
   const [isOffline, setIsOffline] = useState<boolean>(
@@ -135,6 +136,23 @@ export default function App() {
 
         {/* Main Tab Content Display */}
         <main className="pb-16 md:pb-8">
+          {currentTab === "overview" && (
+            <div className="p-4 md:p-6 max-w-7xl mx-auto">
+              <MasterNavigationHub
+                currentTab={currentTab}
+                setCurrentTab={setCurrentTab}
+                project={project}
+                locale={locale}
+                setLocale={setLocale}
+                theme={theme}
+                setTheme={setTheme}
+                isOffline={isOffline}
+                onQuickBuild={handleQuickBuild}
+                isBuilding={isBuilding}
+              />
+            </div>
+          )}
+
           {currentTab === "canvas" && (
             <ModuleCanvas
               project={project}

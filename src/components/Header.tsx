@@ -27,7 +27,9 @@ import {
   Share2,
   Sliders,
   Activity,
+  Layers,
 } from "lucide-react";
+import { PWAInstallButton } from "./PWAInstallButton";
 import { ProjectConfig } from "../types";
 import { Locale, TRANSLATIONS } from "../data/translations";
 
@@ -60,6 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
   const t = TRANSLATIONS[locale] || TRANSLATIONS.tr;
 
   const navItems = [
+    { id: "overview", label: "Master Dashboard", icon: Layers, badge: "Hub" },
     { id: "canvas", label: t.navCanvas, icon: Boxes },
     { id: "build", label: t.navBuild, icon: Cpu, badge: "APK/AAB" },
     { id: "github", label: "GitHub & Hibrit Derleme", icon: FolderGit2, badge: "CI/CD" },
@@ -111,6 +114,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Global Controls & Status */}
         <div className="flex items-center gap-2.5">
+          {/* PWA In-App Install Prompt */}
+          <PWAInstallButton />
+
           {/* Offline/Online status badge */}
           <div
             className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
