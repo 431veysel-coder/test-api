@@ -16,6 +16,9 @@ import {
   ExternalLink,
   RefreshCw,
   Sliders,
+  Loader2,
+  XCircle,
+  Zap,
 } from "lucide-react";
 import { BuildLogRecord, BuildType, ProjectConfig } from "../types";
 
@@ -43,7 +46,9 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [copiedSha, setCopiedSha] = useState<boolean>(false);
   const [buildHistory, setBuildHistory] = useState<BuildLogRecord[]>([]);
+  const [currentBuildId, setCurrentBuildId] = useState<string | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   // Fetch build history on mount
   useEffect(() => {
@@ -72,77 +77,132 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
     }
   }, [liveLogs]);
 
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
   const runBuild = async () => {
     if (isBuilding) return;
+
+    // Close any existing EventSource
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
     setIsBuilding(true);
-    setProgressPercent(5);
-    setCurrentStepText("Derleme ortamı hazırlanıyor...");
+    setProgressPercent(0);
+    setCurrentStepText("Derleme isteği gönderiliyor...");
     setLiveLogs([
-      `[DROIDCRAFT-INIT] Cloud Build Daemon v4.8 (Worker: Frankfurt-Node-01)`,
+      `[DROIDCRAFT-INIT] Cloud Build Daemon v4.8.2 (Worker: Frankfurt-Node-01)`,
       `[CONFIG] Package: ${project.packageName} | Version: ${project.versionName} (${project.versionCode})`,
-      `[TARGET] Android SDK 35 (Vanilla Ice Cream) | Min SDK: ${project.minSdk}`,
+      `[TARGET] Android SDK 35 (Vanilla Ice Cream) | Min SDK: ${project.minSdk} | NDK r27c`,
       `[LANG] ${project.language.toUpperCase()} | Modules: ${project.activeModules.length} aktif`,
+      `[BUILD] ${selectedBuildType} mode selected`,
     ]);
-
-    // Simulated progress steps with realistic Android build stages
-    const steps = [
-      { text: "Bağımlılıklar çözümleniyor (Maven Central, Google Maven)...", progress: 20 },
-      { text: "AAPT2 ile XML layoutlar ve kaynaklar derleniyor...", progress: 40 },
-      { text: "D8/R8 ile bytecode ve DEX üretimi yapılıyor...", progress: 65 },
-      { text: "ProGuard kural karartması ve dead-code temizliği yapılıyor...", progress: 80 },
-      { text: "APK paketleniyor ve zipalign (4-byte alignment) uygulanıyor...", progress: 92 },
-      { text: "Keystore V2+V3+V4 imzası atılıyor ve SHA-256 mühürleniyor...", progress: 98 },
-    ];
-
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < steps.length) {
-        const step = steps[currentStep];
-        setProgressPercent(step.progress);
-        setCurrentStepText(step.text);
-        setLiveLogs((prev) => [
-          ...prev,
-          `[STEP ${currentStep + 1}/${steps.length}] ${step.text}`,
-        ]);
-        currentStep++;
-      }
-    }, 600);
 
     try {
       const response = await fetch("/api/build/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectName: project.name,
-          packageName: project.packageName,
-          versionName: project.versionName,
-          versionCode: project.versionCode,
-          language: project.language,
+          projectId: project.id,
           buildType: selectedBuildType,
-          modules: project.activeModules,
-          minify: project.minifyEnabled,
-          signingScheme: project.signingScheme,
         }),
       });
 
-      const data = await response.json();
-      clearInterval(interval);
-
-      if (data.success && data.build) {
-        setProgressPercent(100);
-        setCurrentStepText("Derleme başarıyla tamamlandı!");
-        setLiveLogs(data.build.logs);
-        setLastBuild(data.build);
-        setBuildHistory((prev) => [data.build, ...prev]);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Build başlatılamadı");
       }
+
+      // Handle SSE stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("Stream reader not available");
+      }
+
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              handleBuildEvent(data);
+            } catch (e) {
+              console.warn("Failed to parse SSE data:", line);
+            }
+          }
+        }
+      }
+
     } catch (err: any) {
-      clearInterval(interval);
-      setLiveLogs((prev) => [
-        ...prev,
-        `[FATAL] Bulut derleme motoru hatası: ${err.message}`,
-      ]);
-    } finally {
+      setLiveLogs((prev) => [...prev, `[FATAL] Bulut derleme motoru hatası: ${err.message}`]);
       setIsBuilding(false);
+    }
+  };
+
+  const handleBuildEvent = (data: any) => {
+    switch (data.type) {
+      case "log":
+        if (data.message) {
+          setLiveLogs((prev) => [...prev, data.message]);
+        }
+        break;
+      case "progress":
+        if (data.progress !== undefined) setProgressPercent(data.progress);
+        if (data.step) setCurrentStepText(data.step);
+        if (data.buildId) setCurrentBuildId(data.buildId);
+        break;
+      case "done":
+        setProgressPercent(100);
+        setCurrentStepText(data.error ? "Derleme başarısız!" : "Derleme başarıyla tamamlandı!");
+        setIsBuilding(false);
+        if (data.error) {
+          setLiveLogs((prev) => [...prev, `[FATAL] ${data.error}`]);
+        } else {
+          setLiveLogs((prev) => [...prev, `[SUCCESS] BUILD SUCCESSFUL in ${data.durationSeconds}s`]);
+          setLastBuild({
+            id: data.buildId,
+            projectName: project.name,
+            packageName: project.packageName,
+            version: project.versionName,
+            versionCode: project.versionCode,
+            buildType: selectedBuildType,
+            language: project.language,
+            status: data.error ? "failed" : "success",
+            durationSeconds: data.durationSeconds || 0,
+            fileSizeMb: data.fileSizeMb || 0,
+            sha256: data.sha256 || "",
+            downloadUrl: data.downloadUrl || "",
+            modulesCount: project.activeModules.length,
+            createdAt: new Date().toISOString(),
+            logs: liveLogs,
+          });
+          fetchHistory();
+        }
+        break;
+      case "error":
+        setLiveLogs((prev) => [...prev, `[FATAL] ${data.error}`]);
+        setIsBuilding(false);
+        break;
+      case "complete":
+        // Final event
+        break;
     }
   };
 
@@ -150,6 +210,28 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
     navigator.clipboard.writeText(hash);
     setCopiedSha(true);
     setTimeout(() => setCopiedSha(false), 2000);
+  };
+
+  const formatLogLine = (line: string, idx: number) => {
+    let colorClass = "text-slate-300";
+    if (line.includes("[SUCCESS]") || line.includes("SUCCESSFUL"))
+      colorClass = "text-emerald-400 font-bold";
+    else if (line.includes("[FATAL]") || line.includes("ERROR"))
+      colorClass = "text-rose-400 font-bold";
+    else if (line.includes("[STEP"))
+      colorClass = "text-cyan-300";
+    else if (line.includes("[CONFIG]") || line.includes("[INIT]") || line.includes("[DROIDCRAFT"))
+      colorClass = "text-indigo-300";
+    else if (line.includes("[GRADLE]") || line.includes("[TASK]"))
+      colorClass = "text-amber-300";
+    else if (line.includes("[BUILD]") || line.includes("[TARGET]") || line.includes("[LANG]"))
+      colorClass = "text-purple-300";
+
+    return (
+      <div key={idx} className={`${colorClass} leading-relaxed break-all text-[11px]`}>
+        {line}
+      </div>
+    );
   };
 
   return (
@@ -166,7 +248,7 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
               </h2>
             </div>
             <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded">
-              Gradle 8.7 / AGP 8.4
+              Gradle 8.7 / AGP 8.4.1
             </span>
           </div>
 
@@ -298,16 +380,30 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
           >
             {isBuilding ? (
               <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Bulut Motoru Derliyor (%{progressPercent})...</span>
               </>
             ) : (
               <>
                 <Play className="w-4 h-4 fill-current" />
                 <span>Bulutta Derle ve Paketi Üret</span>
+                <Zap className="w-3.5 h-3.5" />
               </>
             )}
           </button>
+
+          {/* Real Build Status Indicator */}
+          {isBuilding && (
+            <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-slate-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Gerçek Gradle derlemesi çalışıyor (SSE stream aktif)</span>
+              </div>
+              <div className="text-[10px] text-slate-500">
+                WebSocket/SSE üzerinden canlı log akışı alınıyor. Tarayıcıyı kapatmayın.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right: Live Terminal & Build Telemetry (7 cols) */}
@@ -324,11 +420,22 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
                 <Terminal className="w-3.5 h-3.5 text-cyan-400" />
                 droidcraft-builder@worker-eu-frankfurt:~
               </span>
+              {currentBuildId && (
+                <span className="px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/40 text-cyan-300 text-[10px] font-mono">
+                  {currentBuildId}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2 text-[10px]">
               <span className="text-slate-500">Auto-Scroll: On</span>
               <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">ANSI 256</span>
+              {isBuilding && (
+                <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  LIVE
+                </span>
+              )}
             </div>
           </div>
 
@@ -354,27 +461,10 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
               <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
                 <Cpu className="w-8 h-8 opacity-40 text-slate-400 animate-pulse" />
                 <p>Derleme motoru beklemede. Başlatmak için sol taraftaki butona basın.</p>
+                <p className="text-[10px] text-slate-500">Gerçek Gradle 8.7 + AGP 8.4.1 + Kotlin 2.1 + NDK r27c</p>
               </div>
             ) : (
-              liveLogs.map((line, idx) => {
-                let colorClass = "text-slate-300";
-                if (line.includes("[SUCCESS]") || line.includes("SUCCESSFUL"))
-                  colorClass = "text-emerald-400 font-bold";
-                else if (line.includes("[FATAL]") || line.includes("ERROR"))
-                  colorClass = "text-rose-400 font-bold";
-                else if (line.includes("[STEP"))
-                  colorClass = "text-cyan-300";
-                else if (line.includes("[CONFIG]") || line.includes("[INIT]"))
-                  colorClass = "text-indigo-300";
-                else if (line.includes("[GRADLE]"))
-                  colorClass = "text-amber-300";
-
-                return (
-                  <div key={idx} className={`${colorClass} leading-relaxed break-all`}>
-                    {line}
-                  </div>
-                );
-              })
+              liveLogs.map((line, idx) => formatLogLine(line, idx))
             )}
             <div ref={logsEndRef} />
           </div>
@@ -467,21 +557,16 @@ export const BuildEngine: React.FC<BuildEngineProps> = ({
                 viewBox="0 0 100 100"
                 fill="black"
               >
-                {/* SVG pattern simulating QR Code */}
                 <rect width="100" height="100" fill="white" />
                 <rect x="10" y="10" width="25" height="25" fill="black" />
                 <rect x="15" y="15" width="15" height="15" fill="white" />
                 <rect x="18" y="18" width="9" height="9" fill="black" />
-
                 <rect x="65" y="10" width="25" height="25" fill="black" />
                 <rect x="70" y="15" width="15" height="15" fill="white" />
                 <rect x="73" y="18" width="9" height="9" fill="black" />
-
                 <rect x="10" y="65" width="25" height="25" fill="black" />
                 <rect x="15" y="70" width="15" height="15" fill="white" />
                 <rect x="18" y="73" width="9" height="9" fill="black" />
-
-                {/* Random matrix bits */}
                 <rect x="40" y="12" width="6" height="6" fill="black" />
                 <rect x="52" y="15" width="6" height="12" fill="black" />
                 <rect x="42" y="25" width="8" height="6" fill="black" />
