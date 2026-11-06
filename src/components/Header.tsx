@@ -25,6 +25,8 @@ import {
   FolderGit2,
   Zap,
   Share2,
+  Sliders,
+  Activity,
 } from "lucide-react";
 import { ProjectConfig } from "../types";
 import { Locale, TRANSLATIONS } from "../data/translations";
@@ -69,6 +71,9 @@ export const Header: React.FC<HeaderProps> = ({
     { id: "browser", label: t.navBrowser || "Tarayıcı & Veri", icon: Globe, badge: "Ajan" },
     { id: "automations", label: "Otomasyonlar", icon: Zap, badge: "Hub" },
     { id: "public_apis", label: "Unified Public APIs", icon: Share2, badge: "Gateway" },
+    { id: "agent_plugin", label: "Agent Plugin API", icon: Cpu, badge: "Eklenti" },
+    { id: "settings", label: "Gelişmiş Ayarlar", icon: Sliders, badge: "Master" },
+    { id: "control_center", label: "Kontrol Paneli", icon: Activity, badge: "Daemon" },
     { id: "database", label: t.navDatabase || "Dahili Veritabanı", icon: Database },
     { id: "preview", label: t.navPreview, icon: Smartphone },
     { id: "asset", label: t.navAsset, icon: Sparkles, highlight: true },

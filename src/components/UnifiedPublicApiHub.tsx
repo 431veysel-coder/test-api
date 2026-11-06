@@ -375,6 +375,8 @@ console.log('Gateway Sonucu:', result);`;
                 className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
               >
                 <option value="all">Tüm Kategoriler</option>
+                <option value="academic">🎓 Akademik Makale & Araştırma (OpenAlex, arXiv, PubMed...)</option>
+                <option value="open_data">🏛️ Açık Veri Platformları (Wikidata, Data.gov, Zenodo...)</option>
                 <option value="crypto">Kripto & Döviz</option>
                 <option value="weather">Hava Durumu</option>
                 <option value="developer">Geliştirici & Kod</option>

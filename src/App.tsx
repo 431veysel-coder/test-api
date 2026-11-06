@@ -22,6 +22,9 @@ import { LinuxContainerStudio } from "./components/LinuxContainerStudio";
 import { GitHubHybridHub } from "./components/GitHubHybridHub";
 import { AutomationsStudio } from "./components/AutomationsStudio";
 import { UnifiedPublicApiHub } from "./components/UnifiedPublicApiHub";
+import { AgentPluginHub } from "./components/AgentPluginHub";
+import { AdvancedSettingsHub } from "./components/AdvancedSettingsHub";
+import { DeveloperControlCenter } from "./components/DeveloperControlCenter";
 import { McpHub } from "./components/McpHub";
 import { FirebaseStudio } from "./components/FirebaseStudio";
 import { FirebaseProvider } from "./context/FirebaseContext";
@@ -182,6 +185,12 @@ export default function App() {
           {currentTab === "automations" && <AutomationsStudio />}
 
           {currentTab === "public_apis" && <UnifiedPublicApiHub />}
+
+          {currentTab === "agent_plugin" && <AgentPluginHub />}
+
+          {currentTab === "settings" && <AdvancedSettingsHub project={project} setProject={setProject} />}
+
+          {currentTab === "control_center" && <DeveloperControlCenter />}
 
           {currentTab === "database" && <DatabaseStudio />}
 
