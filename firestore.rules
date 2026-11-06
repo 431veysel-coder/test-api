@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Security Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation Blueprint for Note
+    function isValidNote(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.content is string && data.content.size() <= 5000 &&
+             data.category is string && (
+               data.category == 'general' || data.category == 'architecture' ||
+               data.category == 'jvm' || data.category == 'vscode' ||
+               data.category == 'dependencies' || data.category == 'build' || data.category == 'cache'
+             ) &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 10)) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // Validation Blueprint for Project
+    function isValidProject(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.packageName is string && data.packageName.size() > 0 && data.packageName.size() <= 150 &&
+             data.language is string && data.language.size() <= 50 &&
+             (!('versionName' in data) || (data.versionName is string && data.versionName.size() <= 30)) &&
+             (!('targetSdk' in data) || data.targetSdk is number) &&
+             (!('activeModules' in data) || (data.activeModules is list && data.activeModules.size() <= 30)) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // Validation Blueprint for KnowledgeItem
+    function isValidKnowledge(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.type is string && (
+               data.type == 'learned' || data.type == 'todo' ||
+               data.type == 'not_to_do' || data.type == 'best_practice'
+             ) &&
+             data.description is string && data.description.size() <= 3000 &&
+             (!('priority' in data) || (data.priority in ['low', 'medium', 'high', 'critical'])) &&
+             (!('status' in data) || (data.status in ['active', 'completed', 'archived'])) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // Validation Blueprint for DevEnvironment
+    function isValidDevEnv(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.jvmVersion is string && data.jvmVersion.size() <= 50 &&
+             data.gradleVersion is string && data.gradleVersion.size() <= 50 &&
+             (!('vscodeExtensions' in data) || (data.vscodeExtensions is list && data.vscodeExtensions.size() <= 30)) &&
+             (!('cachePolicy' in data) || (data.cachePolicy is string && data.cachePolicy.size() <= 100)) &&
+             (!('dependencyNotes' in data) || (data.dependencyNotes is string && data.dependencyNotes.size() <= 3000)) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // Match /notes/{noteId}
+    match /notes/{noteId} {
+      allow get: if isOwner(existing().userId) && isValidId(noteId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isOwner(incoming().userId) && isValidId(noteId) && isValidNote(incoming());
+      allow update: if isOwner(existing().userId) && isValidId(noteId) &&
+                      incoming().userId == existing().userId &&
+                      isValidNote(incoming()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'category', 'tags', 'updatedAt']);
+      allow delete: if isOwner(existing().userId) && isValidId(noteId);
+    }
+
+    // Match /projects/{projectId}
+    match /projects/{projectId} {
+      allow get: if isOwner(existing().userId) && isValidId(projectId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isOwner(incoming().userId) && isValidId(projectId) && isValidProject(incoming());
+      allow update: if isOwner(existing().userId) && isValidId(projectId) &&
+                      incoming().userId == existing().userId &&
+                      isValidProject(incoming()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['name', 'packageName', 'versionName', 'targetSdk', 'language', 'activeModules', 'updatedAt']);
+      allow delete: if isOwner(existing().userId) && isValidId(projectId);
+    }
+
+    // Match /knowledge/{itemId}
+    match /knowledge/{itemId} {
+      allow get: if isOwner(existing().userId) && isValidId(itemId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isOwner(incoming().userId) && isValidId(itemId) && isValidKnowledge(incoming());
+      allow update: if isOwner(existing().userId) && isValidId(itemId) &&
+                      incoming().userId == existing().userId &&
+                      isValidKnowledge(incoming()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['title', 'type', 'description', 'priority', 'status', 'updatedAt']);
+      allow delete: if isOwner(existing().userId) && isValidId(itemId);
+    }
+
+    // Match /dev_environments/{envId}
+    match /dev_environments/{envId} {
+      allow get: if isOwner(existing().userId) && isValidId(envId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isOwner(incoming().userId) && isValidId(envId) && isValidDevEnv(incoming());
+      allow update: if isOwner(existing().userId) && isValidId(envId) &&
+                      incoming().userId == existing().userId &&
+                      isValidDevEnv(incoming()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['jvmVersion', 'gradleVersion', 'vscodeExtensions', 'cachePolicy', 'dependencyNotes', 'updatedAt']);
+      allow delete: if isOwner(existing().userId) && isValidId(envId);
+    }
+  }
+}

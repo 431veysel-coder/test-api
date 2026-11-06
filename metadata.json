@@ -1,0 +1,6 @@
+{
+  "name": "DroidCraft Cloud OS - Mobil APK Derleme ve Proje Stüdyosu",
+  "description": "Android & çapraz platform mobil APK/AAB derleme, paketleme, sürükle-bırak modül mimarisi, AI destekli kod ve görsel üretim stüdyosu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

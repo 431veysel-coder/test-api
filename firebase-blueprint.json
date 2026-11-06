@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "Note": {
+      "title": "Developer Note",
+      "description": "Geliştirici notları, mimari kararlar ve kod parçacıkları",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "title": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string", "maxLength": 5000 },
+        "category": {
+          "type": "string",
+          "enum": ["general", "architecture", "jvm", "vscode", "dependencies", "build", "cache"]
+        },
+        "tags": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "title", "content", "category"]
+    },
+    "Project": {
+      "title": "Cloud Mobile Project",
+      "description": "Bulut üzerinde saklanan mobil uygulama proje yapılandırmaları",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "name": { "type": "string", "maxLength": 100 },
+        "packageName": { "type": "string", "maxLength": 150 },
+        "versionName": { "type": "string", "maxLength": 30 },
+        "targetSdk": { "type": "number" },
+        "language": { "type": "string" },
+        "activeModules": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "name", "packageName", "language"]
+    },
+    "KnowledgeItem": {
+      "title": "Knowledge and Guide Item",
+      "description": "Öğrenilenler, yapılacaklar, yapılmayacaklar ve en iyi pratikler",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "title": { "type": "string", "maxLength": 200 },
+        "type": {
+          "type": "string",
+          "enum": ["learned", "todo", "not_to_do", "best_practice"]
+        },
+        "description": { "type": "string", "maxLength": 3000 },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "completed", "archived"]
+        },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "title", "type", "description"]
+    },
+    "DevEnvironment": {
+      "title": "Development Environment Config",
+      "description": "VSCode eklentileri, JVM ayarları, bağımlılıklar ve önbellek yapılandırmaları",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "jvmVersion": { "type": "string", "maxLength": 50 },
+        "gradleVersion": { "type": "string", "maxLength": 50 },
+        "vscodeExtensions": { "type": "array" },
+        "cachePolicy": { "type": "string", "maxLength": 100 },
+        "dependencyNotes": { "type": "string", "maxLength": 3000 },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "jvmVersion", "gradleVersion"]
+    }
+  },
+  "firestore": {
+    "/notes/{noteId}": {
+      "schema": "Note",
+      "description": "Kullanıcı geliştirici notları koleksiyonu"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Kullanıcı mobil projeleri koleksiyonu"
+    },
+    "/knowledge/{itemId}": {
+      "schema": "KnowledgeItem",
+      "description": "Öğrenilenler, yapılacak ve yapılmayacaklar bilgi havuzu"
+    },
+    "/dev_environments/{envId}": {
+      "schema": "DevEnvironment",
+      "description": "VSCode, JVM, bağımlılık ve önbellek yapılandırma koleksiyonu"
+    }
+  }
+}
